@@ -2,11 +2,11 @@ name: Backend CI
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
     paths:
       - 'starter/backend/**'
   workflow_dispatch:
-  
+
 defaults:
   run:
     working-directory: starter/backend
@@ -14,34 +14,51 @@ defaults:
 jobs:
   lint:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Install Pipenv and Dependencies
+
+      - name: Install Pipenv and dependencies
         run: |
           pip install pipenv
           pipenv install --dev
-      - run: pipenv run lint
+
+      - name: Run lint
+        run: pipenv run lint
 
   test:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - name: Install Pipenv and Dependencies
+
+      - name: Install Pipenv and dependencies
         run: |
           pip install pipenv
           pipenv install --dev
-      - run: pipenv run test
+
+      - name: Run tests
+        run: pipenv run test
 
   build:
     needs: [lint, test]
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Build Docker image
-        run: docker build --tag mp-backend:ci .
+        run: docker build -t movie-picture-backend:ci .

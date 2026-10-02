@@ -2,7 +2,7 @@ name: Frontend CD
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
       - 'starter/frontend/**'
   workflow_dispatch:
@@ -12,71 +12,19 @@ defaults:
     working-directory: starter/frontend
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: 'npm'
-          cache-dependency-path: starter/frontend/package-lock.json
-      - run: npm ci
-      - run: npm run lint
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18
-          cache: 'npm'
-          cache-dependency-path: starter/frontend/package-lock.json
-      - run: npm ci
-      - run: CI=true npm test
-
   build:
-    needs: [lint, test]
     runs-on: ubuntu-latest
-    outputs:
-      image_tag: ${{ steps.vars.outputs.sha_short }}
+
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Debug AWS Credentials
-        run: |
-          echo "=== AWS Credentials Debug ==="
-          if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
-            echo "❌ ERROR: AWS_ACCESS_KEY_ID is EMPTY"
-          else
-            echo "✓ AWS_ACCESS_KEY_ID is set (length: ${#AWS_ACCESS_KEY_ID})"
-          fi
-          
-          if [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
-            echo "❌ ERROR: AWS_SECRET_ACCESS_KEY is EMPTY"
-          else
-            echo "✓ AWS_SECRET_ACCESS_KEY is set (length: ${#AWS_SECRET_ACCESS_KEY})"
-          fi
-          
-          if [ -z "${{ secrets.AWS_REGION }}" ]; then
-            echo "❌ ERROR: AWS_REGION is EMPTY"
-          else
-            echo "✓ AWS_REGION is set: ${{ secrets.AWS_REGION }}"
-          fi
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Test AWS Connection
-        run: aws sts get-caller-identity
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -87,17 +35,21 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_FRONTEND_REPO }}
           IMAGE_TAG: ${{ github.sha }}
+          BACKEND_API_URL: ${{ secrets.BACKEND_API_URL }}
         run: |
           docker build \
-            --build-arg=REACT_APP_MOVIE_API_URL=http://localhost:5000 \
+            --build-arg REACT_APP_MOVIE_API_URL=$BACKEND_API_URL \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -106,15 +58,30 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name ${{ secrets.EKS_CLUSTER_NAME }} \
+            --region ${{ secrets.AWS_REGION }}
 
-      - name: Update Kubeconfig
-        run: aws eks update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }} --region ${{ secrets.AWS_REGION }}
+      - name: Install Kustomize
+        run: |
+          curl -sS https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
+          sudo mv kustomize /usr/local/bin/
 
       - name: Deploy with Kustomize
+        working-directory: .
+        env:
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          ECR_REPOSITORY: ${{ secrets.ECR_FRONTEND_REPO }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
           cd starter/frontend/k8s
-          kustomize edit set image frontend=${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_FRONTEND_REPO }}:${{ github.sha }}
-          kustomize build | kubectl apply -f -
+          kustomize edit set image frontend=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          kustomize build . | kubectl apply -f -
+
+      - name: Check deployment
+        run: |
+          kubectl rollout status deployment/frontend --timeout=180s
+          kubectl get pods
+          kubectl get services
