@@ -14,7 +14,7 @@ RUN npm ci
 # Copy code
 COPY . .
 
-# Build the app
+# Build the React app
 RUN npm run build
 
 # Expose the port used by the React app
