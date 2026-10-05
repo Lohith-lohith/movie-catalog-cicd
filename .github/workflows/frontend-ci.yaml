@@ -1,4 +1,4 @@
-name: Frontend CI
+name: Frontend Continuous Integration
 
 on:
   pull_request:
@@ -52,13 +52,32 @@ jobs:
       - name: Run tests
         run: CI=true npm test -- --watchAll=false
 
-  build:
+    build:
     needs: [lint, test]
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        working-directory: starter/frontend
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+          cache-dependency-path: starter/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build React application
+        run: npm run build
+
       - name: Build Docker image
-        run: docker build -t movie-picture-frontend:ci .
+        run: docker build -t movie-picture-frontend:ci .git add .github/workflows
+git commit -m "Fix frontend CI build job and workflow naming"
+git push origin main

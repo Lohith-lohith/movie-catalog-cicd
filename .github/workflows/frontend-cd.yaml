@@ -1,4 +1,4 @@
-name: Frontend CD
+name: Frontend Continuous Deployment
 
 on:
   push:
@@ -12,7 +12,51 @@ defaults:
     working-directory: starter/frontend
 
 jobs:
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: starter/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: starter/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: CI=true npm test -- --watchAll=false
+
+
   build:
+    needs: [lint, test]
     runs-on: ubuntu-latest
 
     steps:
@@ -28,8 +72,8 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
-        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+        id: login-ecr
 
       - name: Build and Push Docker Image
         env:
@@ -43,6 +87,7 @@ jobs:
             -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
 
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
 
   deploy:
     needs: build
@@ -60,25 +105,20 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
       - name: Update kubeconfig
         run: |
           aws eks update-kubeconfig \
-            --name ${{ secrets.EKS_CLUSTER_NAME }} \
-            --region ${{ secrets.AWS_REGION }}
+            --region ${{ secrets.AWS_REGION }} \
+            --name ${{ secrets.EKS_CLUSTER_NAME }}
 
       - name: Install Kustomize
         run: |
-          curl -sS https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
+          curl -s https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash
           sudo mv kustomize /usr/local/bin/
 
       - name: Deploy with Kustomize
-        working-directory: .
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
           ECR_REPOSITORY: ${{ secrets.ECR_FRONTEND_REPO }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
