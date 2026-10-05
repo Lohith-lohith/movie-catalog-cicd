@@ -10,6 +10,8 @@ on:
 defaults:
   run:
     working-directory: starter/backend
+
+jobs:
   lint:
     runs-on: ubuntu-latest
 
@@ -31,7 +33,6 @@ defaults:
       - name: Lint
         run: pipenv run lint
 
-
   test:
     runs-on: ubuntu-latest
 
@@ -52,8 +53,9 @@ defaults:
 
       - name: Test
         run: pipenv run test
-jobs:
+
   build:
+    needs: [lint, test]
     runs-on: ubuntu-latest
 
     steps:
