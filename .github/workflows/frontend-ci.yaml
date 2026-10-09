@@ -1,3 +1,4 @@
+```yaml
 name: Frontend Continuous Integration
 
 on:
@@ -14,7 +15,6 @@ defaults:
 jobs:
   lint:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,7 +34,6 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,22 +51,17 @@ jobs:
       - name: Run tests
         run: CI=true npm test -- --watchAll=false
 
-    build:
+  build:
     needs: [lint, test]
     runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: starter/frontend
-
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: 18
           cache: npm
           cache-dependency-path: starter/frontend/package-lock.json
 
@@ -78,6 +72,5 @@ jobs:
         run: npm run build
 
       - name: Build Docker image
-        run: docker build -t movie-picture-frontend:ci .git add .github/workflows
-git commit -m "Fix frontend CI build job and workflow naming"
-git push origin main
+        run: docker build -t movie-picture-frontend:ci .
+```
