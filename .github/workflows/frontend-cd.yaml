@@ -91,7 +91,7 @@ jobs:
             -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
-  ```yaml
+  
   deploy:
     needs: build
     runs-on: ubuntu-latest
